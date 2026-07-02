@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Minimalist Vocab - Live Chinese Stream Translation</title>
+    <title>Minimalist Vocab</title>
     <style>
         :root {
             --bg-color: #1C1C1E;
@@ -300,14 +300,34 @@
             font-size: 16px;
             letter-spacing: 0.5px;
         }
-        .preview-edit-input {
+        .input-with-clear {
+            display: flex;
+            gap: 8px;
+            align-items: center;
             width: 100%;
+        }
+        .preview-edit-input {
+            flex: 1;
             font-size: 14px;
             padding: 10px;
-            margin-bottom: 4px;
+            margin-bottom: 0;
             border-radius: 6px;
             user-select: text;
             -webkit-user-select: text;
+        }
+        .clear-btn {
+            background: none;
+            border: 1px solid var(--border-color);
+            color: var(--sub-color);
+            padding: 9px 12px;
+            font-size: 13px;
+            border-radius: 6px;
+            cursor: pointer;
+            flex-shrink: 0;
+            touch-action: manipulation;
+        }
+        .clear-btn:active {
+            opacity: 0.5;
         }
         .definition-tags-container {
             display: flex;
@@ -414,7 +434,7 @@
         <button id="startQueryBtn" class="action-btn" style="width:100%; margin-bottom:15px;" onclick="fetchTranslationsOnlineStream()">開始批量流式查詢</button>
         
         <div id="queryPreviewSection" style="display:none;">
-            <p style="margin-bottom:8px; font-weight: 500; font-size:14px;">即時查詞預覽（查到一個即時顯示一個，點擊中文標籤可自由加字組合）：</p>
+            <p style="margin-bottom:8px; font-weight: 500; font-size:14px;">即時查詞預覽（可點擊中文標籤組合、或右側 ❌ 清空手寫）：</p>
             <div class="preview-box" id="previewBox"></div>
             <button class="action-btn" style="width:100%; margin-top:10px; background-color: var(--text-color); color: var(--bg-color);" onclick="saveImportedWordsOnline()">確認無誤，匯入筒中</button>
         </div>
@@ -719,7 +739,7 @@
             return text;
         }
 
-        // 單獨丟入單字快捷功能 (串流式即時加入)
+        // 單獨丟入快捷查詢
         async function addSingleWordStream() {
             const inputEl = document.getElementById('singleWordInput');
             const word = inputEl.value.trim();
@@ -730,7 +750,7 @@
             await processSingleWordItem(word, "", onlineImportList.length);
         }
 
-        // 批次串流查詢核心：查到一個，立刻渲染一個
+        // 批量流式分步上架
         async function fetchTranslationsOnlineStream() {
             const btn = document.getElementById('startQueryBtn');
             btn.innerText = '正在聯網自動一字多義查詞中...';
@@ -752,7 +772,6 @@
                 const word = parts[0];
                 let userTrans = parts.slice(1).join(' ');
                 
-                // 異步執行，不需要等前一個單字查完，即可直接先上架 DOM 節點
                 processSingleWordItem(word, userTrans, onlineImportList.length);
             }
 
@@ -760,9 +779,8 @@
             btn.disabled = false;
         }
 
-        // 處理單個單字，完成即時插入 PreviewBox
+        // 處理單個單字節點
         async function processSingleWordItem(word, userTrans, localIndex) {
-            // 1. 先建立一個空白的卡片佔位符，達到「馬上看到」的目的
             const previewBox = document.getElementById('previewBox');
             const card = document.createElement('div');
             card.className = 'preview-card';
@@ -772,7 +790,10 @@
                     <span class="preview-word-title">${word}</span>
                     <span style="font-size:12px; color:var(--sub-color);">查詢中...</span>
                 </div>
-                <input type="text" class="preview-edit-input" id="pre_in_${localIndex}" value="讀取中...">
+                <div class="input-with-clear">
+                    <input type="text" class="preview-edit-input" id="pre_in_${localIndex}" value="讀取中...">
+                    <button type="button" class="clear-btn" onclick="clearPreviewInput(${localIndex})">❌ 清除</button>
+                </div>
                 <div class="definition-tags-container" id="tags_container_${localIndex}"></div>
             `;
             previewBox.appendChild(card);
@@ -790,10 +811,8 @@
                         if (data && data[0] && data[0].meanings) {
                             for (const m of data[0].meanings) {
                                 const pos = m.partOfSpeech;
-                                // 翻成中文詞性
                                 const posZh = await translateToChinese(pos);
                                 if (m.definitions) {
-                                    // 抓取前 2 個釋義進行中文化
                                     for (const d of m.definitions.slice(0, 2)) {
                                         const translatedDef = await translateToChinese(d.definition);
                                         candidates.push(`[${posZh}] ${translatedDef}`);
@@ -811,7 +830,6 @@
                 candidates.push('[暫無內建釋義，可在此手打加字]');
             }
 
-            // 2. 將查詢完後的數據推入全域陣列中
             const itemObj = {
                 id: Date.now() + localIndex,
                 word: word,
@@ -820,7 +838,6 @@
             };
             onlineImportList[localIndex] = itemObj;
 
-            // 3. 更新剛才的佔位卡片內容
             const inputEl = document.getElementById(`pre_in_${localIndex}`);
             inputEl.value = itemObj.defaultText;
             
@@ -837,7 +854,8 @@
                 badge.innerText = cand;
                 badge.onclick = () => {
                     const curVal = inputEl.value.trim();
-                    if (curVal === '' || curVal.startsWith('[暫無內建') || curVal === itemObj.allCandidates[0]) {
+                    // 如果原本是提示字、預設字或空白，點擊時直接取代，不再錯誤串接
+                    if (curVal === '' || curVal.startsWith('[暫無內建') || curVal === '讀取中...' || curVal === itemObj.allCandidates[0]) {
                         inputEl.value = cand;
                     } else {
                         inputEl.value = curVal + ', ' + cand;
@@ -859,12 +877,21 @@
             }
         }
 
+        // 新增：清除按鈕的獨立觸發事件
+        function clearPreviewInput(index) {
+            const inputEl = document.getElementById(`pre_in_${index}`);
+            if (inputEl) {
+                inputEl.value = '';
+                inputEl.focus();
+            }
+        }
+
         function saveImportedWordsOnline() {
             const targetId = document.getElementById('importTargetSelect').value;
             if(!appData.lists[targetId]) return;
 
             onlineImportList.forEach((item, index) => {
-                if(!item) return; // 跳過未查完的
+                if(!item) return; 
                 const inputEl = document.getElementById(`pre_in_${index}`);
                 const editVal = inputEl ? inputEl.value.trim() : item.defaultText;
                 appData.lists[targetId].words.push({
