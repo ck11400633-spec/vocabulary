@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Minimalist Vocab - Cylinder Mode</title>
+    <title>Minimalist Vocab - Center Focused Cylinder</title>
     <style>
         :root {
-             --bg-color: #1C1C1E;
+            --bg-color: #1C1C1E;
             --text-color: #E5E5EA;
             --sub-color: #8E8E93;
             --border-color: #2C2C2E;
@@ -79,11 +79,11 @@
         .stage-container {
             width: 100%;
             height: 100%;
-            perspective: 1200px; /* 增加透視感 */
             display: flex;
             justify-content: center;
             align-items: center;
             cursor: grab;
+            position: relative;
         }
         .stage-container:active {
             cursor: grabbing;
@@ -92,20 +92,19 @@
             width: 100%;
             height: 100%;
             position: relative;
-            transform-style: preserve-3d;
-            transform-origin: center center;
         }
         .word-card {
             position: absolute;
             left: 50%;
             top: 50%;
-            transform-style: preserve-3d;
             cursor: pointer;
             white-space: nowrap;
             padding: 15px;
+            transform-origin: center center;
+            will-change: transform, opacity;
         }
         .word-text {
-            font-size: 24px; /* 加大字體 */
+            font-size: 24px; 
             font-weight: 300;
             letter-spacing: 0.5px;
             position: relative;
@@ -255,14 +254,6 @@
             resize: none;
             user-select: text;
             -webkit-user-select: text;
-        }
-        .section-subtitle {
-            font-size: 16px;
-            font-weight: 500;
-            margin-top: 15px;
-            margin-bottom: 10px;
-            border-left: 3px solid var(--text-color);
-            padding-left: 8px;
         }
         .list-item-row {
             display: flex;
@@ -443,7 +434,10 @@
                         { id: 4, word: 'しんりんよく', trans: ['森林浴'], wrongCount: 1, lastReviewed: Date.now() },
                         { id: 5, word: 'wanderlust', trans: ['漫遊癖'], wrongCount: 0, lastReviewed: Date.now() },
                         { id: 6, word: 'nefarious', trans: ['邪惡的'], wrongCount: 3, lastReviewed: Date.now() - 600000000 },
-                        { id: 7, word: 'sonder', trans: ['意識到每個人都有其獨特的生活'], wrongCount: 1, lastReviewed: Date.now() }
+                        { id: 7, word: 'sonder', trans: ['意識到每個人都有其獨特的生活'], wrongCount: 1, lastReviewed: Date.now() },
+                        { id: 8, word: 'solitude', trans: ['獨處'], wrongCount: 0, lastReviewed: Date.now() },
+                        { id: 9, word: 'melancholy', trans: ['憂鬱'], wrongCount: 0, lastReviewed: Date.now() },
+                        { id: 10, word: 'luminous', trans: ['發光的'], wrongCount: 2, lastReviewed: Date.now() }
                     ]
                 }
             }
@@ -456,12 +450,28 @@
 
         let currentFocusIndex = -1;
         let onlineImportList = [];
+        
+        // 3D 核心變數
         let rotX = 0, rotY = 0;
-        let translateZ = -600; // 筒狀半徑，預設往後退 600px 以便看到全貌
+        let userZ = 0; 
+        let dynamicRadius = 380; 
+        const CAMERA_FOCAL = 400; 
+
+        // 縮小邊界限制（初始值的一半，對應 Z 軸限制值）
+        const MIN_USER_Z = -380; 
+        const MAX_USER_Z = 400;
+
+        // 自動旋轉與慣性變數
+        let autoRotSpeedY = 0.04; 
+        let vx = 0, vy = 0;       
+        const friction = 0.94;    
+        
         let isDragging = false;
         let dragMoved = false;
         let startX, startY;
+        let lastTime, lastX, lastY; 
         let initialPinchDist = null;
+        let animationFrameId = null;
 
         function getCombinedWords() {
             let combined = [];
@@ -482,7 +492,7 @@
             updateNavBarTitle();
             renderCylinderSpace();
             init3DControl();
-            updateSpaceTransform();
+            startRenderLoop();
         };
 
         function showToast(msg) {
@@ -501,7 +511,7 @@
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
-            document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '淺色模式' : '深色模式';
+            document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '深色模式' : '淺色模式';
         }
 
         function updateNavBarTitle() {
@@ -513,7 +523,6 @@
             }
         }
 
-        // 改造成圓筒狀環繞（Cylinder Layout）
         function renderCylinderSpace() {
             const space = document.getElementById('space3d');
             space.innerHTML = '';
@@ -524,39 +533,32 @@
             }
 
             const totalWords = wordsArr.length;
-            // 根據單字量自動決定分幾層高（每層放 8~12 個效果最好）
-            const wordsPerLayer = totalWords > 12 ? 10 : totalWords;
-            const heightStep = 110; // 每層的縱向間距
-            const radius = 600; // 筒狀半徑，人在中間，單字在外圈圍繞
+            dynamicRadius = 380 + (totalWords * 4);
+            dynamicRadius = Math.max(380, Math.min(1000, dynamicRadius));
+
+            const wordsPerLayer = dynamicRadius > 500 ? 12 : 8;
+            const heightStep = 110; 
 
             wordsArr.forEach((item, index) => {
                 const card = document.createElement('div');
                 card.className = 'word-card';
                 card.setAttribute('data-index', index);
 
-                // 計算筒狀座標
-                const layer = Math.floor(index / wordsPerLayer); // 第幾層
+                const layer = Math.floor(index / wordsPerLayer);
                 const totalLayers = Math.ceil(totalWords / wordsPerLayer);
-                const layerIndex = index % wordsPerLayer; // 當前層的第幾個
+                const layerIndex = index % wordsPerLayer;
 
-                // 角度（水平環繞）
                 const theta = (layerIndex / wordsPerLayer) * 2 * Math.PI;
+                const origX = dynamicRadius * Math.sin(theta);
+                const origZ = dynamicRadius * Math.cos(theta);
+                const origY = (layer - (totalLayers - 1) / 2) * heightStep;
 
-                // 3D 空間座標位置 (筒狀)
-                const x = radius * Math.sin(theta);
-                const z = radius * Math.cos(theta);
+                card.dataset.origX = origX;
+                card.dataset.origY = origY;
+                card.dataset.origZ = origZ;
 
-                // 縱向居中排列
-                const y = (layer - (totalLayers - 1) / 2) * heightStep;
-
-                // 根據複習時間設定大小
                 const daysUnreviewed = (Date.now() - item.lastReviewed) / (1000 * 60 * 60 * 24);
-                let sizeScale = daysUnreviewed > 3 ? 1.35 : 1;
-                
-                card.dataset.x = x;
-                card.dataset.y = y;
-                card.dataset.z = z;
-                card.dataset.scale = sizeScale;
+                card.dataset.baseScale = daysUnreviewed > 3 ? 1.35 : 1;
 
                 const textSpan = document.createElement('span');
                 textSpan.className = 'word-text';
@@ -581,34 +583,100 @@
                 });
                 space.appendChild(card);
             });
-            updateBillboards();
         }
 
-        //Billboard Effect: 讓單字不論怎麼轉都面向鏡頭
-        function updateBillboards() {
+        // 以「視角中心點」為核心的優化渲染公式
+        function updatePseudo3DProjection() {
             const cards = document.querySelectorAll('.word-card');
+            if (cards.length === 0) return;
+
+            const radX = (rotX * Math.PI) / 180;
+            const radY = (rotY * Math.PI) / 180;
+
+            const cosX = Math.cos(radX), sinX = Math.sin(radX);
+            const cosY = Math.cos(radY), sinY = Math.sin(radY);
+
             cards.forEach(card => {
-                const x = card.dataset.x;
-                const y = card.dataset.y;
-                const z = card.dataset.z;
-                const scale = card.dataset.scale;
-                card.style.transform = `translate3d(${x}px, ${y}px, ${z}px) rotateY(${-rotY}deg) rotateX(${-rotX}deg) scale(${scale})`;
+                let x = parseFloat(card.dataset.origX);
+                let y = parseFloat(card.dataset.origY);
+                let z = parseFloat(card.dataset.origZ);
+
+                let x1 = x * cosY - z * sinY;
+                let z1 = x * sinY + z * cosY;
+                let y2 = y * cosX - z1 * sinX;
+                let z2 = y * sinX + z1 * cosX;
+
+                let finalZ = z2 + userZ;
+                const viewDist = CAMERA_FOCAL + finalZ;
+                
+                if (viewDist <= 20) {
+                    card.style.opacity = 0;
+                    card.style.transform = `translate3d(0px, 0px, 0) scale(0)`;
+                    return;
+                }
+
+                const projectionScale = CAMERA_FOCAL / viewDist;
+                const screenX = x1 * projectionScale;
+                const screenY = y2 * projectionScale;
+
+                // 【修正：以視角中心為主】
+                // 計算單字投影到螢幕後，距離中心點 (0, 0) 的 2D 像素距離
+                const distToCenter = Math.hypot(screenX, screenY);
+                
+                // 越靠近中心點，centerFactor 越接近 1；遠離中心點則逼近 0。
+                // 250px 範圍內為主要感應區
+                const centerFactor = Math.max(0, 1 - distToCenter / 250); 
+
+                // 在前方 (finalZ < 200) 且位於視角中心時才做平滑放大，最大放大倍率鎖定在 1.7 倍
+                let focusMagnify = 1.0;
+                if (finalZ < 200) {
+                    focusMagnify = 1.0 + (centerFactor * 0.7);
+                }
+
+                const baseScale = parseFloat(card.dataset.baseScale);
+                const finalScale = projectionScale * baseScale * focusMagnify;
+                
+                // 讓非中心的邊緣單字稍微淡出，強化中央焦點
+                let opacity = projectionScale * (0.4 + centerFactor * 0.8);
+                if (opacity > 1) opacity = 1; 
+                if (viewDist < 100) opacity = (viewDist - 20) / 80; 
+
+                card.style.opacity = opacity;
+                card.style.zIndex = Math.floor(1000 - finalZ);
+                card.style.transform = `translate3d(calc(-50% + ${screenX}px), calc(-50% + ${screenY}px), 0) scale(${finalScale})`;
             });
         }
 
-        function updateSpaceTransform() {
-            document.getElementById('space3d').style.transform = `translateZ(${translateZ}px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+        function startRenderLoop() {
+            function loop() {
+                if (!isDragging) {
+                    rotY += autoRotSpeedY;
+                    rotY += vy;
+                    rotX += vx;
+                    vy *= friction;
+                    vx *= friction;
+                    rotX = Math.max(-40, Math.min(40, rotX));
+                }
+                updatePseudo3DProjection();
+                animationFrameId = requestAnimationFrame(loop);
+            }
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            loop();
         }
 
         function init3DControl() {
             const container = document.getElementById('stageContainer');
             
-            // 滑鼠/手指 拖曳旋轉
             container.addEventListener('pointerdown', (e) => {
                 isDragging = true;
                 dragMoved = false;
                 startX = e.clientX;
                 startY = e.clientY;
+                lastX = e.clientX;
+                lastY = e.clientY;
+                lastTime = performance.now();
+                vx = 0;
+                vy = 0;
                 container.setPointerCapture(e.pointerId);
             });
 
@@ -619,29 +687,40 @@
                 if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
                     dragMoved = true;
                 }
+                
                 rotY += dx * 0.25;
                 rotX -= dy * 0.25;
-                rotX = Math.max(-45, Math.min(45, rotX)); // 限制上下視角
+                rotX = Math.max(-40, Math.min(40, rotX));
+
+                const now = performance.now();
+                const dt = now - lastTime;
+                if (dt > 0) {
+                    vy = ((e.clientX - lastX) / dt) * 1.5; 
+                    vx = -((e.clientY - lastY) / dt) * 1.5; 
+                }
+
                 startX = e.clientX;
                 startY = e.clientY;
-                updateSpaceTransform();
-                updateBillboards();
+                lastX = e.clientX;
+                lastY = e.clientY;
+                lastTime = now;
             });
 
             container.addEventListener('pointerup', (e) => {
                 isDragging = false;
                 container.releasePointerCapture(e.pointerId);
+                if (performance.now() - lastTime > 100) {
+                    vx = 0;
+                    vy = 0;
+                }
             });
 
-            // 電腦端滑鼠滾輪前後移動
             window.addEventListener('wheel', (e) => {
                 if (document.querySelector('.modal.active')) return;
-                translateZ -= e.deltaY * 0.5;
-                translateZ = Math.max(-1200, Math.min(100, translateZ)); // 限制縮放範圍
-                updateSpaceTransform();
+                userZ -= e.deltaY * 0.4;
+                userZ = Math.max(MIN_USER_Z, Math.min(MAX_USER_Z, userZ));
             }, { passive: true });
 
-            // 手機端雙指縮放前後移動
             container.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 2) {
                     initialPinchDist = Math.hypot(
@@ -658,10 +737,9 @@
                         e.touches[0].pageY - e.touches[1].pageY
                     );
                     const delta = currentDist - initialPinchDist;
-                    translateZ += delta * 1.5;
-                    translateZ = Math.max(-1200, Math.min(100, translateZ));
+                    userZ += delta * 1.2;
+                    userZ = Math.max(MIN_USER_Z, Math.min(MAX_USER_Z, userZ));
                     initialPinchDist = currentDist;
-                    updateSpaceTransform();
                 }
             }, { passive: true });
 
@@ -672,7 +750,6 @@
             });
         }
 
-        // 單字 Focus 檢視邏輯
         function openFocus(index) {
             const wordsArr = getCombinedWords();
             if(!wordsArr[index]) return;
@@ -693,7 +770,7 @@
 
         function closeFocus() {
             document.getElementById('focusOverlay').classList.remove('active');
-            renderCylinderSpace(); // 重新渲染以更新錯誤點點
+            renderCylinderSpace(); 
         }
 
         function switchFocusAdjacent(dir) {
@@ -728,7 +805,6 @@
             switchFocusAdjacent(1);
         }
 
-        // 彈窗管理
         function openModal(id) {
             document.getElementById(id).classList.add('active');
             if (id === 'listsModal') renderListsManager();
@@ -740,7 +816,6 @@
             renderCylinderSpace();
         }
 
-        // 單字包組合管理
         function renderListsManager() {
             const container = document.getElementById('listsContainer');
             container.innerHTML = '';
@@ -799,7 +874,6 @@
             renderListsManager();
         }
 
-        // 模擬字典查詞與匯入
         function prepareImportTargetSelect() {
             const select = document.getElementById('importTargetSelect');
             select.innerHTML = '';
@@ -813,7 +887,6 @@
             const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 0);
             if(lines.length === 0) return;
 
-            // 簡單模擬查詞，實際應使用 API
             onlineImportList = lines.map((line, i) => {
                 const parts = line.split(/\s+/);
                 const word = parts[0];
@@ -857,7 +930,6 @@
             closeModal('importModal');
         }
 
-        // 自我測驗邏輯
         let quizPool = [];
         let currentQuizIndex = 0;
         
@@ -885,7 +957,6 @@
             const currentQuestion = quizPool[currentQuizIndex];
             const allWords = getCombinedWords();
             
-            // 生成隨機選項 (含正確答案)
             let options = [currentQuestion.trans.join(', ')];
             while (options.length < 4) {
                 const randomWord = allWords[Math.floor(Math.random() * allWords.length)];
@@ -894,7 +965,6 @@
                     options.push(transStr);
                 }
             }
-            // 打亂選項順序
             options.sort(() => 0.5 - Math.random());
 
             const qDiv = document.createElement('div');
@@ -916,9 +986,9 @@
 
         function checkQuizAnswer(selected, correct) {
             if (selected === correct) {
-                showToast('答對了！👍');
+                showToast('答對了');
             } else {
-                showToast('答錯了，再加把勁！💡');
+                showToast('答錯了');
             }
             currentQuizIndex++;
             setTimeout(nextQuizQuestion, 1000);
