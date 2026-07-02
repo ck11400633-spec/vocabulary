@@ -1,1030 +1,508 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-<title>徜徉單字 - Minimalist Vocab</title>
-<style>
-:root {
---bg-color: #ffffff;
---text-color: #111111;
---sub-color: #888888;
---border-color: #eeeeee;
---overlay-bg: rgba(255,255,255,0.96);
---dot-color: #111111;
---toast-bg: rgba(0,0,0,0.05);
-}
-
-[data-theme="dark"] {
---bg-color: #1C1C1E;
---text-color: #E5E5EA;
---sub-color: #8E8E93;
---border-color: #2C2C2E;
---overlay-bg: rgba(28,28,30,0.96);
---dot-color: #FFFFFF;
---toast-bg: rgba(255,255,255,0.1);
-}
-
-* {
-box-sizing: border-box;
-margin: 0;
-padding: 0;
-user-select: none;
--webkit-user-select: none;
-touch-action: none; /* 禁用瀏覽器預設手勢，全權由 JS 控制 */
-}
-
-body {
-background-color: var(--bg-color);
-color: var(--text-color);
-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-overflow: hidden;
-width: 100vw;
-height: 100vh;
-padding-top: env(safe-area-inset-top);
-transition: background-color 0.3s, color 0.3s;
-}
-
-/* 頂部導覽列 */
-.nav-bar {
-position: absolute;
-top: 25px;
-left: 20px;
-right: 20px;
-display: flex;
-justify-content: space-between;
-align-items: center;
-z-index: 100;
-}
-
-.nav-left, .nav-right {
-display: flex;
-gap: 5px;
-align-items: center;
-}
-
-.nav-btn {
-background: none;
-border: none;
-color: var(--text-color);
-font-size: 16px;
-cursor: pointer;
-padding: 12px 14px;
-letter-spacing: 1px;
-opacity: 0.8;
-transition: opacity 0.2s;
-touch-action: manipulation;
-}
-.nav-btn:hover { opacity: 0.5; }
-
-#currentListNameBtn {
-font-weight: 500;
-border-bottom: 1px dashed var(--text-color);
-padding-bottom: 2px;
-}
-
-/* 3D 舞台 */
-.stage-container {
-width: 100%;
-height: 100%;
-perspective: 800px;
-display: flex;
-justify-content: center;
-align-items: center;
-cursor: grab;
-}
-.stage-container:active { cursor: grabbing; }
-
-.space3d {
-width: 100%;
-height: 100%;
-position: relative;
-transform-style: preserve-3d;
-}
-
-/* 徜徉單字卡 */
-.word-card {
-position: absolute;
-left: 50%;
-top: 50%;
-transform-style: preserve-3d;
-cursor: pointer;
-white-space: nowrap;
-padding: 15px; /* 加大觸摸盲區熱區 */
-}
-
-.word-text {
-font-size: 22px;
-font-weight: 300;
-letter-spacing: 0.5px;
-position: relative;
-display: inline-block;
-pointer-events: none; /* 讓事件綁定在 card 上，避免子元素干擾 */
-}
-
-.wrong-dot {
-position: absolute;
-background-color: var(--dot-color);
-border-radius: 50%;
-display: none;
-}
-
-/* 放大聚焦模式 */
-.focus-overlay {
-position: absolute;
-top: 0; left: 0; width: 100%; height: 100%;
-background: var(--overlay-bg);
-display: flex;
-flex-direction: column;
-justify-content: center;
-align-items: center;
-z-index: 200;
-opacity: 0;
-pointer-events: none;
-transition: opacity 0.3s ease;
-}
-.focus-overlay.active {
-opacity: 1;
-pointer-events: auto;
-}
-
-.focus-word {
-font-size: 44px;
-font-weight: 300;
-margin-bottom: 15px;
-letter-spacing: 1px;
-text-align: center;
-}
-
-.focus-trans {
-font-size: 18px;
-color: var(--sub-color);
-margin-bottom: 35px;
-min-height: 44px;
-display: flex;
-align-items: center;
-justify-content: center;
-font-weight: 400;
-cursor: pointer;
-text-align: center;
-padding: 0 20px;
-touch-action: manipulation;
-}
-
-.action-group {
-display: flex;
-gap: 15px;
-margin-bottom: 40px;
-}
-
-.action-btn {
-background: none;
-border: 1px solid var(--text-color);
-color: var(--text-color);
-padding: 12px 26px;
-font-size: 15px;
-cursor: pointer;
-border-radius: 24px;
-transition: all 0.2s;
-touch-action: manipulation;
-}
-.action-btn:hover {
-background-color: var(--text-color);
-color: var(--bg-color);
-}
-
-.switch-word-group {
-display: flex;
-gap: 30px;
-align-items: center;
-}
-.arrow-btn {
-background: none;
-border: none;
-color: var(--sub-color);
-font-size: 16px;
-cursor: pointer;
-padding: 15px;
-touch-action: manipulation;
-}
-.arrow-btn:hover { color: var(--text-color); }
-
-/* 極簡 Toast 提示 */
-.toast {
-position: absolute;
-top: 120px;
-left: 50%;
-transform: translateX(-50%);
-background: var(--toast-bg);
-color: var(--text-color);
-padding: 10px 24px;
-border-radius: 20px;
-font-size: 14px;
-z-index: 400;
-opacity: 0;
-pointer-events: none;
-transition: opacity 0.3s;
-}
-.toast.show { opacity: 1; }
-
-/* 模組彈窗 */
-.modal {
-position: absolute;
-top: 0; left: 0; width: 100%; height: 100%;
-background: var(--bg-color);
-z-index: 300;
-display: flex;
-flex-direction: column;
-padding: 60px 25px 40px 25px;
-overflow-y: auto;
-display: none;
-touch-action: pan-y; /* 允許彈窗內垂直捲動 */
-}
-.modal.active { display: flex; }
-
-.modal-title {
-font-size: 24px;
-font-weight: 300;
-margin-bottom: 25px;
-text-align: center;
-}
-
-textarea, input[type="text"], select {
-width: 100%;
-background: var(--bg-color);
-color: var(--text-color);
-border: 1px solid var(--border-color);
-padding: 14px;
-font-size: 16px;
-outline: none;
-margin-bottom: 15px;
--webkit-appearance: none;
-touch-action: manipulation;
-}
-textarea { height: 150px; resize: none; user-select: text; -webkit-user-select: text; }
-
-.section-subtitle {
-font-size: 16px;
-font-weight: 500;
-margin-top: 15px;
-margin-bottom: 10px;
-border-left: 3px solid var(--text-color);
-padding-left: 8px;
-}
-
-.list-item-row {
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 14px 10px;
-border-bottom: 1px solid var(--border-color);
-}
-.list-item-row:hover { background-color: var(--border-color); }
-.list-checkbox-label { display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer; font-size: 16px; }
-.list-checkbox-label input { width: 20px; height: 20px; }
-.list-actions { display: flex; gap: 12px; }
-.sm-btn { font-size: 14px; color: var(--sub-color); background: none; border: none; cursor: pointer; padding: 6px 4px; touch-action: manipulation; }
-
-.sub-words-list {
-background: var(--toast-bg);
-padding: 5px 15px;
-border-radius: 6px;
-margin: 5px 10px 15px 10px;
-display: none;
-flex-direction: column;
-max-height: 250px;
-overflow-y: auto;
-}
-.sub-words-list.active { display: flex; }
-.word-manage-item {
-display: flex;
-justify-content: space-between;
-align-items: center;
-padding: 10px 0;
-border-bottom: 1px dashed var(--border-color);
-font-size: 14px;
-}
-.word-manage-item:last-child { border-bottom: none; }
-
-.preview-box {
-border: 1px dashed var(--border-color);
-padding: 15px;
-border-radius: 8px;
-max-height: 200px;
-overflow-y: auto;
-margin-bottom: 15px;
-font-size: 14px;
-}
-.preview-item {
-display: flex;
-justify-content: space-between;
-align-items: center;
-margin-bottom: 8px;
-border-bottom: 1px solid var(--border-color);
-padding-bottom: 4px;
-gap: 15px;
-}
-.preview-edit-input {
-flex: 1;
-max-width: 200px;
-font-size: 14px;
-padding: 6px 8px;
-margin-bottom: 0;
-border-radius: 4px;
-user-select: text;
--webkit-user-select: text;
-}
-
-.quiz-container { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
-.quiz-q { font-size: 38px; font-weight: 300; margin-bottom: 40px; text-align: center; }
-.quiz-options { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
-.quiz-opt-btn { width: 100%; padding: 16px; background: none; border: 1px solid var(--text-color); color: var(--text-color); font-size: 16px; cursor: pointer; text-align: center; border-radius: 8px; touch-action: manipulation; }
-.quiz-opt-btn:hover { background-color: var(--text-color); color: var(--bg-color); }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <title>Minimalist Vocab</title>
+    <style>
+        :root {
+            --bg-color: #ffffff;
+            --text-color: #111111;
+            --sub-color: #888888;
+            --border-color: #eeeeee;
+            --overlay-bg: rgba(255,255,255,0.96);
+            --dot-color: #111111;
+            --toast-bg: rgba(0,0,0,0.05);
+        }
+        [data-theme="dark"] {
+            --bg-color: #1C1C1E;
+            --text-color: #E5E5EA;
+            --sub-color: #8E8E93;
+            --border-color: #2C2C2E;
+            --overlay-bg: rgba(28,28,30,0.96);
+            --dot-color: #FFFFFF;
+            --toast-bg: rgba(255,255,255,0.1);
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+        }
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            overflow: hidden;
+            width: 100vw;
+            height: 100vh;
+            padding-top: env(safe-area-inset-top);
+            transition: background-color 0.3s, color 0.3s;
+        }
+        .nav-bar {
+            position: absolute;
+            top: 25px;
+            left: 20px;
+            right: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            z-index: 100;
+        }
+        .nav-left, .nav-right {
+            display: flex;
+            gap: 5px;
+            align-items: center;
+        }
+        .nav-btn {
+            background: none;
+            border: none;
+            color: var(--text-color);
+            font-size: 16px;
+            cursor: pointer;
+            padding: 12px 14px;
+            letter-spacing: 1px;
+            opacity: 0.8;
+            transition: opacity 0.2s;
+            touch-action: manipulation;
+        }
+        .nav-btn:hover { opacity: 0.5; }
+        #currentListNameBtn {
+            font-weight: 500;
+            border-bottom: 1px dashed var(--text-color);
+            padding-bottom: 2px;
+        }
+        .stage-container {
+            width: 100%;
+            height: 100%;
+            perspective: 800px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: grab;
+        }
+        .stage-container:active { cursor: grabbing; }
+        .space3d {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            /* 讓縮放與旋轉的核心集中在中心 */
+            transform-origin: center center; 
+        }
+        .word-card {
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform-style: preserve-3d;
+            cursor: pointer;
+            white-space: nowrap;
+            padding: 15px;
+        }
+        .word-text {
+            font-size: 22px;
+            font-weight: 300;
+            letter-spacing: 0.5px;
+            position: relative;
+            display: inline-block;
+            pointer-events: none;
+        }
+        .wrong-dot {
+            position: absolute;
+            background-color: var(--dot-color);
+            border-radius: 50%;
+            display: none;
+        }
+        .focus-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--overlay-bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+        }
+        .focus-overlay.active { opacity: 1; pointer-events: auto; }
+        .focus-word { font-size: 44px; font-weight: 300; margin-bottom: 15px; letter-spacing: 1px; text-align: center; }
+        .focus-trans {
+            font-size: 18px;
+            color: var(--sub-color);
+            margin-bottom: 35px;
+            min-height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 400;
+            cursor: pointer;
+            text-align: center;
+            padding: 0 20px;
+            touch-action: manipulation;
+        }
+        .action-group { display: flex; gap: 15px; margin-bottom: 40px; }
+        .action-btn {
+            background: none;
+            border: 1px solid var(--text-color);
+            color: var(--text-color);
+            padding: 12px 26px;
+            font-size: 15px;
+            cursor: pointer;
+            border-radius: 24px;
+            transition: all 0.2s;
+            touch-action: manipulation;
+        }
+        .action-btn:hover { background-color: var(--text-color); color: var(--bg-color); }
+        .switch-word-group { display: flex; gap: 30px; align-items: center; }
+        .arrow-btn { background: none; border: none; color: var(--sub-color); font-size: 16px; cursor: pointer; padding: 15px; touch-action: manipulation; }
+        .arrow-btn:hover { color: var(--text-color); }
+        .toast {
+            position: absolute;
+            top: 120px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: var(--toast-bg);
+            color: var(--text-color);
+            padding: 10px 24px;
+            border-radius: 20px;
+            font-size: 14px;
+            z-index: 400;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+        .toast.show { opacity: 1; }
+        .modal {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: var(--bg-color);
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            padding: 60px 25px 40px 25px;
+            overflow-y: auto;
+            display: none;
+            touch-action: pan-y;
+        }
+        .modal.active { display: flex; }
+        .modal-title { font-size: 24px; font-weight: 300; margin-bottom: 25px; text-align: center; }
+        textarea, input[type="text"], select {
+            width: 100%;
+            background: var(--bg-color);
+            color: var(--text-color);
+            border: 1px solid var(--border-color);
+            padding: 14px;
+            font-size: 16px;
+            outline: none;
+            margin-bottom: 15px;
+            -webkit-appearance: none;
+            touch-action: manipulation;
+        }
+        textarea { height: 150px; resize: none; user-select: text; -webkit-user-select: text; }
+        .section-subtitle { font-size: 16px; font-weight: 500; margin-top: 15px; margin-bottom: 10px; border-left: 3px solid var(--text-color); padding-left: 8px; }
+        .list-item-row { display: flex; justify-content: space-between; align-items: center; padding: 14px 10px; border-bottom: 1px solid var(--border-color); }
+        .list-item-row:hover { background-color: var(--border-color); }
+        .list-checkbox-label { display: flex; align-items: center; gap: 12px; flex: 1; cursor: pointer; font-size: 16px; }
+        .list-checkbox-label input { width: 20px; height: 20px; }
+        .list-actions { display: flex; gap: 12px; }
+        .sm-btn { font-size: 14px; color: var(--sub-color); background: none; border: none; cursor: pointer; padding: 6px 4px; touch-action: manipulation; }
+        .sub-words-list { background: var(--toast-bg); padding: 5px 15px; border-radius: 6px; margin: 5px 10px 15px 10px; display: none; flex-direction: column; max-height: 250px; overflow-y: auto; }
+        .sub-words-list.active { display: flex; }
+        .word-manage-item { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px dashed var(--border-color); font-size: 14px; }
+        .word-manage-item:last-child { border-bottom: none; }
+        .preview-box { border: 1px dashed var(--border-color); padding: 15px; border-radius: 8px; max-height: 200px; overflow-y: auto; margin-bottom: 15px; font-size: 14px; }
+        .preview-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; border-bottom: 1px solid var(--border-color); padding-bottom: 4px; gap: 15px; }
+        .preview-edit-input { flex: 1; max-width: 200px; font-size: 14px; padding: 6px 8px; margin-bottom: 0; border-radius: 4px; user-select: text; -webkit-user-select: text; }
+        .quiz-container { display: flex; flex-direction: column; align-items: center; justify-content: center; flex: 1; width: 100%; }
+        .quiz-q { font-size: 38px; font-weight: 300; margin-bottom: 40px; text-align: center; }
+        .quiz-options { width: 100%; max-width: 360px; display: flex; flex-direction: column; gap: 14px; }
+        .quiz-opt-btn { width: 100%; padding: 16px; background: none; border: 1px solid var(--text-color); color: var(--text-color); font-size: 16px; cursor: pointer; text-align: center; border-radius: 8px; touch-action: manipulation; }
+        .quiz-opt-btn:hover { background-color: var(--text-color); color: var(--bg-color); }
+    </style>
 </head>
 <body>
-
-<div class="toast" id="toastNotice">提示</div>
-
-<div class="nav-bar">
-<div class="nav-left">
-<button class="nav-btn" id="currentListNameBtn" onclick="openModal('listsModal')">選擇單字包</button>
-<button class="nav-btn" onclick="openModal('importModal')">匯入</button>
-<button class="nav-btn" onclick="startQuiz()">測驗</button>
-</div>
-<div class="nav-right">
-<button class="nav-btn" id="themeBtn" onclick="toggleTheme()">深色模式</button>
-</div>
-</div>
-
-<div class="stage-container" id="stageContainer">
-<div class="space3d" id="space3d"></div>
-</div>
-
-<div class="focus-overlay" id="focusOverlay">
-<div class="focus-word" id="focusWord">Word</div>
-<div class="focus-trans" id="focusTrans" onclick="revealTranslation()">點擊顯示翻譯</div>
-
-<div class="action-group">
-<button class="action-btn" onclick="markLearned(true)">記住了</button>
-<button class="action-btn" onclick="markLearned(false)">還沒記住</button>
-</div>
-
-<div class="switch-word-group">
-<button class="arrow-btn" onclick="switchFocusAdjacent(-1)">← 上一個</button>
-<button class="action-btn" style="border:none; padding:12px 20px;" onclick="closeFocus()">返回海中</button>
-<button class="arrow-btn" onclick="switchFocusAdjacent(1)">下一個 →</button>
-</div>
-</div>
-
-<div class="modal" id="listsModal">
-<div class="modal-title">我的單字表與組合</div>
-<div style="display:flex; gap:10px; margin-bottom:10px;">
-<input type="text" id="newListNameInput" placeholder="輸入新單字表名稱..." style="margin-bottom:0;">
-<button class="action-btn" onclick="createNewList()">創立</button>
-</div>
-
-<div class="section-subtitle">基礎單字包（可多選）</div>
-<div id="listsContainer" style="max-height: 350px; overflow-y: auto;"></div>
-
-<div style="display: flex; gap: 10px; margin-top: 15px; align-items: center;">
-<input type="text" id="newComboNameInput" placeholder="將目前勾選存為新組合名稱..." style="margin-bottom:0;">
-<button class="action-btn" onclick="saveCurrentCombo()">儲存此組合</button>
-</div>
-
-<div class="section-subtitle">已存組合包</div>
-<div id="combosContainer" style="max-height: 150px; overflow-y: auto;"></div>
-
-<button class="action-btn" style="width:100%; margin-top:20px; background-color: var(--text-color); color: var(--bg-color);" onclick="applySelectedLists()">確認應用選取</button>
-<button class="nav-btn" style="margin-top:10px; padding: 15px;" onclick="closeModal('listsModal')">關閉</button>
-</div>
-
-<div class="modal" id="importModal">
-<div class="modal-title">自動查詞匯入</div>
-<p style="font-size: 13px; color: var(--sub-color); margin-bottom: 10px; text-align: center;">請選擇要匯入的目的地：</p>
-<select id="importTargetSelect"></select>
-<p style="font-size: 13px; color: var(--sub-color); margin-bottom: 10px; text-align: center;">請輸入英文或日文單字（一行一個）</p>
-<textarea id="importInput" placeholder="apple&#10;banana&#10;こもれび&#10;serendipity"></textarea>
-
-<button id="startQueryBtn" class="action-btn" style="width:100%; margin-bottom:20px;" onclick="fetchTranslationsOnline()">開始自動查詢中文</button>
-
-<div id="queryPreviewSection" style="display:none; flex: 1; display: flex; flex-direction: column;">
-<p style="margin-bottom:10px; font-weight: 500;">字典查詢預覽（可在下方框內直接修改翻譯）：</p>
-<div class="preview-box" id="previewBox"></div>
-<button class="action-btn" style="width:100%; margin-top:10px; background-color: var(--text-color); color: var(--bg-color);" onclick="saveImportedWordsOnline()">確認無誤，匯入海中</button>
-</div>
-
-<button class="nav-btn" style="margin-top:auto; padding: 15px;" onclick="closeImportModal()">取消退出</button>
-</div>
-
-<div class="modal" id="quizModal">
-<div class="modal-title">自我測驗</div>
-<div class="quiz-container" id="quizContainer"></div>
-<button class="nav-btn" style="margin-top:auto; padding: 15px;" onclick="closeModal('quizModal')">結束測驗</button>
-</div>
-
-<script>
-const defaultPackage = {
-currentListIds: ['list_default'], 
-lists: {
-'list_default': { name: '初始單字表', words: [
-{ id: 1, word: 'serendipity', trans: ['不期而遇的美好'], wrongCount: 2, lastReviewed: Date.now() - 900000000 },
-{ id: 2, word: 'こもれび', trans: ['從樹葉縫隙漏下來的陽光'], wrongCount: 0, lastReviewed: Date.now() },
-{ id: 3, word: 'ephemeral', trans: ['轉瞬即逝的'], wrongCount: 4, lastReviewed: Date.now() - 500000000 },
-{ id: 4, word: 'しんりんよく', trans: ['森林浴'], wrongCount: 1, lastReviewed: Date.now() }
-]}
-},
-combos: {} 
-};
-
-let appData = JSON.parse(localStorage.getItem('vocab_app_data')) || defaultPackage;
-
-if (appData.lists && appData.lists['list_default'] && appData.lists['list_default'].name === '核心字彙') {
-appData.lists['list_default'].name = '初始單字表';
-}
-if (!Array.isArray(appData.currentListIds)) {
-appData.currentListIds = appData.currentListId ? [appData.currentListId] : ['list_default'];
-}
-if (!appData.combos) appData.combos = {};
-
-let currentFocusIndex = -1;
-let onlineImportList = []; 
-let rotX = 0, rotY = 0;
-let isDragging = false;
-let dragMoved = false; 
-let startX, startY;
-
-function getCombinedWords() {
-let combined = [];
-appData.currentListIds.forEach(id => {
-if (appData.lists[id]) {
-appData.lists[id].words.forEach(w => {
-combined.push({ ...w, originListId: id });
-});
-}
-});
-return combined;
-}
-
-window.onload = function() {
-const savedTheme = localStorage.getItem('theme') || 'dark';
-document.documentElement.setAttribute('data-theme', savedTheme);
-document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '淺色模式' : '深色模式';
-
-updateNavBarTitle();
-render3DSpace();
-init3DControl();
-animate();
-};
-
-function showToast(msg) {
-const toast = document.getElementById('toastNotice');
-toast.innerText = msg;
-toast.classList.add('show');
-setTimeout(() => toast.classList.remove('show'), 1200);
-}
-
-function saveToStorage() {
-localStorage.setItem('vocab_app_data', JSON.stringify(appData));
-}
-
-function toggleTheme() {
-const currentTheme = document.documentElement.getAttribute('data-theme');
-const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-document.documentElement.setAttribute('data-theme', newTheme);
-localStorage.setItem('theme', newTheme);
-document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '淺色模式' : '深色模式';
-render3DSpace();
-}
-
-function updateNavBarTitle() {
-if (appData.currentListIds.length === 1) {
-const id = appData.currentListIds[0];
-document.getElementById('currentListNameBtn').innerText = appData.lists[id] ? appData.lists[id].name : '選擇單字表';
-} else {
-document.getElementById('currentListNameBtn').innerText = `已選 ${appData.currentListIds.length} 個單字包`;
-}
-}
-
-function render3DSpace() {
-const space = document.getElementById('space3d');
-space.innerHTML = '';
-
-const wordsArr = getCombinedWords();
-if (wordsArr.length === 0) {
-space.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:var(--sub-color); font-size:14px; text-align:center; width:80%;">目前無選取單字包或包內空空的，請點選「匯入」或更改單字包勾選</div>`;
-return;
-}
-
-const isMobilePortrait = window.innerWidth < window.innerHeight;
-const radius = isMobilePortrait ? window.innerWidth * 0.42 : 240;
-
-wordsArr.forEach((item, index) => {
-const card = document.createElement('div');
-card.className = 'word-card';
-card.setAttribute('data-index', index);
-
-const phi = Math.acos(-1 + (2 * index) / wordsArr.length);
-const theta = Math.sqrt(wordsArr.length * Math.PI) * phi;
-
-const x = radius * Math.sin(phi) * Math.cos(theta);
-const y = radius * Math.sin(phi) * Math.sin(theta);
-const z = radius * Math.cos(phi);
-
-const daysUnreviewed = (Date.now() - item.lastReviewed) / (1000 * 60 * 60 * 24);
-let sizeScale = daysUnreviewed > 3 ? 1.35 : 1;
-
-card.dataset.x = x; card.dataset.y = y; card.dataset.z = z; card.dataset.scale = sizeScale;
-card.style.transform = `translate3d(${x}px, ${y}px, ${z}px) scale(${sizeScale})`;
-
-const textSpan = document.createElement('span');
-textSpan.className = 'word-text';
-if (isMobilePortrait && item.word.length > 10) textSpan.style.fontSize = '18px';
-textSpan.innerText = item.word;
-
-if(item.wrongCount > 0) {
-const dot = document.createElement('div');
-dot.className = 'wrong-dot';
-dot.style.display = 'block';
-const dotSize = Math.min(5 + item.wrongCount * 1.5, 13);
-dot.style.width = dotSize + 'px'; dot.style.height = dotSize + 'px';
-dot.style.top = `-${dotSize/2}px`; dot.style.right = `-${dotSize}px`;
-textSpan.appendChild(dot);
-}
-
-card.appendChild(textSpan);
-
-// 🌟 核心修正：改用 pointerdown/pointerup 並完全拋棄 onclick 避免模擬點擊穿透
-card.addEventListener('pointerup', (e) => {
-if (dragMoved) return; 
-e.stopPropagation();
-openFocus(index);
-});
-
-space.appendChild(card);
-});
-updateBillboards();
-}
-
-function updateBillboards() {
-const cards = document.querySelectorAll('.word-card');
-cards.forEach(card => {
-const x = card.dataset.x; const y = card.dataset.y; const z = card.dataset.z; const scale = card.dataset.scale;
-card.style.transform = `translate3d(${x}px, ${y}px, ${z}px) rotateY(${-rotY}deg) rotateX(${-rotX}deg) scale(${scale})`;
-});
-}
-
-function init3DControl() {
-const container = document.getElementById('stageContainer');
-
-const dragStart = (x, y) => { 
-isDragging = true; 
-dragMoved = false; 
-startX = x; 
-startY = y; 
-};
-
-const dragMove = (x, y) => {
-if (!isDragging) return;
-const dx = x - startX;
-const dy = y - startY;
-
-if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-dragMoved = true;
-}
-rotY += dx * 0.25; 
-rotX -= dy * 0.25; 
-startX = x; 
-startY = y;
-document.getElementById('space3d').style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
-updateBillboards();
-};
-
-const dragEnd = () => {
-// 使用微小延遲重置，確保單字卡的事件攔截能完美同步
-setTimeout(() => { 
-isDragging = false; 
-}, 10);
-};
-
-// 使用 Pointer Events 同時完美兼容滑鼠與手機觸控，並防止原生穿透
-container.addEventListener('pointerdown', (e) => {
-dragStart(e.clientX, e.clientY);
-});
-window.addEventListener('pointermove', (e) => {
-dragMove(e.clientX, e.clientY);
-});
-window.addEventListener('pointerup', dragEnd);
-window.addEventListener('pointercancel', dragEnd);
-}
-
-function animate() {
-if (!isDragging) {
-rotY += 0.03;
-document.getElementById('space3d').style.transform = `rotateX(${rotX}deg) rotateY(${rotY}deg)`;
-updateBillboards();
-}
-requestAnimationFrame(animate);
-}
-
-function openFocus(index) {
-currentFocusIndex = index;
-const wordsArr = getCombinedWords();
-const item = wordsArr[currentFocusIndex];
-document.getElementById('focusWord').innerText = item.word;
-document.getElementById('focusTrans').innerText = '點擊顯示翻譯';
-document.getElementById('focusOverlay').classList.add('active');
-}
-
-function revealTranslation() {
-const wordsArr = getCombinedWords();
-const item = wordsArr[currentFocusIndex];
-if(item) document.getElementById('focusTrans').innerText = item.trans.join(', ');
-}
-
-function switchFocusAdjacent(direction) {
-const wordsArr = getCombinedWords();
-const maxLen = wordsArr.length;
-if(maxLen === 0) return;
-currentFocusIndex = (currentFocusIndex + direction + maxLen) % maxLen;
-const item = wordsArr[currentFocusIndex];
-document.getElementById('focusWord').innerText = item.word;
-document.getElementById('focusTrans').innerText = '點擊顯示翻譯';
-}
-
-function closeFocus() {
-document.getElementById('focusOverlay').classList.remove('active');
-// 離開聚焦時強制清除剩餘的滑動狀態
-dragMoved = false;
-isDragging = false;
-render3DSpace();
-}
-
-function markLearned(isTrue) {
-const wordsArr = getCombinedWords();
-const proxyItem = wordsArr[currentFocusIndex];
-if(!proxyItem) return;
-
-const originalList = appData.lists[proxyItem.originListId];
-if (originalList) {
-const realItem = originalList.words.find(w => w.id === proxyItem.id);
-if (realItem) {
-if(!isTrue) {
-realItem.wrongCount += 1;
-showToast('已標記為還沒記住');
-} else {
-showToast('記住了！');
-}
-realItem.lastReviewed = Date.now();
-saveToStorage();
-}
-}
-switchFocusAdjacent(1);
-}
-
-async function fetchTranslationsOnline() {
-const input = document.getElementById('importInput').value;
-const lines = input.split('\n').map(l => l.trim()).filter(l => l.length > 0);
-if(lines.length === 0) return alert('請輸入至少一個單字');
-
-const btn = document.getElementById('startQueryBtn');
-const previewSection = document.getElementById('queryPreviewSection');
-const previewBox = document.getElementById('previewBox');
-
-btn.innerText = '查詢中，請稍候...';
-btn.disabled = true;
-previewBox.innerHTML = '';
-onlineImportList = [];
-
-for (let i = 0; i < lines.length; i++) {
-const word = lines[i];
-let translation = '未找到翻譯';
-try {
-let isJapanese = false;
-for (let j = 0; j < word.length; j++) {
-const code = word.charCodeAt(j);
-if ((code >= 0x3040 && code <= 0x309F) || (code >= 0x30A0 && code <= 0x30FF)) {
-isJapanese = true;
-break;
-}
-}
-const langpair = isJapanese ? 'ja|zh-TW' : 'en|zh-TW';
-const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(word)}&langpair=${langpair}`;
-
-const response = await fetch(url);
-const data = await response.json();
-if(data && data.responseData) {
-translation = data.responseData.translatedText.trim().replace(/[.。]+$/, '');
-}
-} catch (e) {
-translation = '網路查詢失敗';
-}
-
-onlineImportList.push({ word, trans: [translation] });
-
-const itemDiv = document.createElement('div');
-itemDiv.className = 'preview-item';
-itemDiv.innerHTML = `
-<span><strong>${word}</strong></span> 
-<input type="text" class="preview-edit-input" id="inlineEdit_${i}" value="${translation}">
-`;
-previewBox.appendChild(itemDiv);
-}
-
-btn.innerText = '查詢完成';
-previewSection.style.display = 'block';
-}
-
-function saveImportedWordsOnline() {
-const targetListId = document.getElementById('importTargetSelect').value;
-const currentList = appData.lists[targetListId];
-if(!currentList) return alert('找不到目標單字包');
-
-onlineImportList.forEach((item, index) => {
-const editedInput = document.getElementById(`inlineEdit_${index}`);
-const finalTranslation = editedInput ? editedInput.value.trim() : item.trans[0];
-
-currentList.words.push({
-id: Date.now() + Math.random(),
-word: item.word,
-trans: [finalTranslation],
-wrongCount: 0,
-lastReviewed: Date.now()
-});
-});
-saveToStorage();
-showToast('成功查詞並儲存變更內容！');
-closeImportModal();
-render3DSpace();
-}
-
-function openModal(id) {
-if(id === 'listsModal') {
-renderListsManager();
-} else if(id === 'importModal') {
-const select = document.getElementById('importTargetSelect');
-select.innerHTML = '';
-Object.keys(appData.lists).forEach(key => {
-const opt = document.createElement('option');
-opt.value = key;
-opt.innerText = appData.lists[key].name;
-select.appendChild(opt);
-});
-}
-document.getElementById(id).classList.add('active');
-}
-
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
-
-function closeImportModal() {
-closeModal('importModal');
-document.getElementById('importInput').value = '';
-document.getElementById('queryPreviewSection').style.display = 'none';
-const btn = document.getElementById('startQueryBtn');
-btn.innerText = '開始自動查詢中文';
-btn.disabled = false;
-}
-
-function renderListsManager() {
-const container = document.getElementById('listsContainer');
-container.innerHTML = '';
-Object.keys(appData.lists).forEach(id => {
-const list = appData.lists[id];
-const row = document.createElement('div');
-row.className = 'list-item-row';
-
-const isChecked = appData.currentListIds.includes(id) ? 'checked' : '';
-
-row.innerHTML = `
-<label class="list-checkbox-label">
-<input type="checkbox" value="${id}" ${isChecked} class="list-pkg-checkbox">
-<span>${list.name} <span style="font-size:12px; color:var(--sub-color);">(${list.words.length}字)</span></span>
-</label>
-<div class="list-actions">
-<button class="sm-btn" onclick="toggleSubWordsList('${id}', event)">查看單字</button>
-<button class="sm-btn" onclick="renameList('${id}', event)">改名</button>
-<button class="sm-btn" style="color:#FF453A;" onclick="deleteList('${id}', event)">刪除</button>
-</div>
-`;
-
-const subWordsListDiv = document.createElement('div');
-subWordsListDiv.className = 'sub-words-list';
-subWordsListDiv.id = `subList_${id}`;
-
-if(list.words.length === 0) {
-subWordsListDiv.innerHTML = `<div style="padding: 8px 0; color: var(--sub-color); text-align:center;">此單字表內目前沒有單字</div>`;
-} else {
-list.words.forEach((w, wIndex) => {
-const wordItem = document.createElement('div');
-wordItem.className = 'word-manage-item';
-wordItem.innerHTML = `
-<span><strong>${w.word}</strong> <span style="color:var(--sub-color); font-size:13px;">(${w.trans.join(', ')})</span></span>
-<button class="sm-btn" style="color:#FF453A; padding: 6px 10px;" onclick="deleteWordFromList('${id}', ${wIndex}, event)">✕</button>
-`;
-subWordsListDiv.appendChild(wordItem);
-});
-}
-
-container.appendChild(row);
-container.appendChild(subWordsListDiv);
-});
-
-const combosContainer = document.getElementById('combosContainer');
-combosContainer.innerHTML = '';
-if(Object.keys(appData.combos).length === 0) {
-combosContainer.innerHTML = `<div style="padding:10px; color:var(--sub-color); font-size:13px; text-align:center;">暫無儲存組合</div>`;
-} else {
-Object.keys(appData.combos).forEach(comboId => {
-const combo = appData.combos[comboId];
-const row = document.createElement('div');
-row.className = 'list-item-row';
-row.innerHTML = `
-<div class="list-name" onclick="applyCombo('${comboId}')" style="cursor:pointer; font-weight:500;">★ ${combo.name} <span style="font-size:12px; color:var(--sub-color);">(${combo.ids.length}個包)</span></div>
-<div class="list-actions">
-<button class="sm-btn" style="color:#FF453A;" onclick="deleteCombo('${comboId}', event)">刪除組合</button>
-</div>
-`;
-combosContainer.appendChild(row);
-});
-}
-}
-
-function toggleSubWordsList(listId, event) {
-event.stopPropagation();
-const targetEl = document.getElementById(`subList_${listId}`);
-if (targetEl) {
-targetEl.classList.toggle('active');
-}
-}
-
-function deleteWordFromList(listId, wordIndex, event) {
-event.stopPropagation();
-const targetList = appData.lists[listId];
-if (!targetList) return;
-
-const wordName = targetList.words[wordIndex].word;
-if (confirm(`確定要將單字「${wordName}」從「${targetList.name}」中刪除嗎？`)) {
-targetList.words.splice(wordIndex, 1);
-saveToStorage();
-renderListsManager(); 
-render3DSpace();     
-showToast('單字已成功刪除');
-}
-}
-
-function createNewList() {
-const name = document.getElementById('newListNameInput').value.trim();
-if(!name) return;
-const id = 'list_' + Date.now();
-appData.lists[id] = { name: name, words: [] };
-document.getElementById('newListNameInput').value = '';
-saveToStorage();
-renderListsManager();
-}
-
-function renameList(id, event) {
-event.stopPropagation();
-const newName = prompt('請輸入新的單字表名稱：', appData.lists[id].name);
-if(newName && newName.trim()) {
-appData.lists[id].name = newName.trim();
-saveToStorage();
-updateNavBarTitle();
-renderListsManager();
-}
-}
-
-function deleteList(id, event) {
-event.stopPropagation();
-if(Object.keys(appData.lists).length <= 1) return alert('請至少保留一個單字表');
-if(confirm(`確定要刪除整個單字包「${appData.lists[id].name}」嗎？`)) {
-delete appData.lists[id];
-appData.currentListIds = appData.currentListIds.filter(i => i !== id);
-if(appData.currentListIds.length === 0) appData.currentListIds = [Object.keys(appData.lists)[0]];
-saveToStorage();
-updateNavBarTitle();
-renderListsManager();
-render3DSpace();
-}
-}
-
-function getCheckedBoxIds() {
-const checkboxes = document.querySelectorAll('.list-pkg-checkbox');
-let checkedIds = [];
-checkboxes.forEach(box => {
-if(box.checked) checkedIds.push(box.value);
-});
-return checkedIds;
-}
-
-function applySelectedLists() {
-const checkedIds = getCheckedBoxIds();
-if(checkedIds.length === 0) return alert('請至少勾選一個單字包！');
-appData.currentListIds = checkedIds;
-saveToStorage();
-updateNavBarTitle();
-render3DSpace();
-closeModal('listsModal');
-showToast('單字包配置已成功套用！');
-}
-
-function saveCurrentCombo() {
-const name = document.getElementById('newComboNameInput').value.trim();
-if(!name) return alert('請輸入要儲存的組合名稱');
-const checkedIds = getCheckedBoxIds();
-if(checkedIds.length === 0) return alert('請先在上方勾選至少一個單字包再進行儲存');
-
-const comboId = 'combo_' + Date.now();
-appData.combos[comboId] = {
-name: name,
-ids: checkedIds
-};
-document.getElementById('newComboNameInput').value = '';
-saveToStorage();
-renderListsManager();
-showToast(`已儲存組合：「${name}」`);
-}
-
-function applyCombo(comboId) {
-const combo = appData.combos[comboId];
-if(!combo) return;
-const validIds = combo.ids.filter(id => appData.lists[id]);
-if(validIds.length === 0) {
-alert('此組合內的基礎單字包已被刪除，無法套用');
-return;
-}
-appData.currentListIds = validIds;
-saveToStorage();
-updateNavBarTitle();
-render3DSpace();
-closeModal('listsModal');
-showToast(`已切換至組合：${combo.name}`);
-}
-
-function deleteCombo(comboId, event) {
-event.stopPropagation();
-if(confirm('確定要刪除這個儲存組合嗎？')) {
-delete appData.combos[comboId];
-saveToStorage();
-renderListsManager();
-}
-}
-
-function startQuiz() {
-const wordsArr = getCombinedWords();
-if(wordsArr.length < 4) return alert('當前勾選的單字包總計至少需要 4 個單字才能進行測驗！');
-openModal('quizModal');
-nextQuizQuestion();
-}
-
-function nextQuizQuestion() {
-const container = document.getElementById('quizContainer');
-container.innerHTML = '';
-const wordsArr = getCombinedWords();
-
-const targetIndex = Math.floor(Math.random() * wordsArr.length);
-const questionItem = wordsArr[targetIndex];
-
-let options = [questionItem.trans[0]];
-while(options.length < 4) {
-const randomTrans = wordsArr[Math.floor(Math.random() * wordsArr.length)].trans[0];
-if(!options.includes(randomTrans)) options.push(randomTrans);
-}
-options.sort(() => Math.random() - 0.5);
-
-const qDiv = document.createElement('div');
-qDiv.className = 'quiz-q'; qDiv.innerText = questionItem.word;
-container.appendChild(qDiv);
-
-const optGroup = document.createElement('div');
-optGroup.className = 'quiz-options';
-
-options.forEach(opt => {
-const btn = document.createElement('button');
-btn.className = 'quiz-opt-btn'; btn.innerText = opt;
-btn.onclick = () => {
-const originalList = appData.lists[questionItem.originListId];
-if (originalList) {
-const realItem = originalList.words.find(w => w.id === questionItem.id);
-if(realItem) {
-if(opt === questionItem.trans[0]) {
-showToast('答對了。');
-realItem.wrongCount = Math.max(0, realItem.wrongCount - 1);
-} else {
-realItem.wrongCount += 1;
-showToast('答錯，黑點變大了。');
-}
-saveToStorage();
-}
-}
-render3DSpace();
-nextQuizQuestion();
-};
-optGroup.appendChild(btn);
-});
-container.appendChild(optGroup);
-}
-
-window.onresize = function() { render3DSpace(); };
-</script>
-</body>
-</html>
+    <div class="toast" id="toastNotice">提示</div>
+    <div class="nav-bar">
+        <div class="nav-left">
+            <button class="nav-btn" id="currentListNameBtn" onclick="openModal('listsModal')">選擇單字包</button>
+            <button class="nav-btn" onclick="openModal('importModal')">匯入</button>
+            <button class="nav-btn" onclick="startQuiz()">測驗</button>
+        </div>
+        <div class="nav-right">
+            <button class="nav-btn" id="themeBtn" onclick="toggleTheme()">深色模式</button>
+        </div>
+    </div>
+    <div class="stage-container" id="stageContainer">
+        <div class="space3d" id="space3d"></div>
+    </div>
+    <div class="focus-overlay" id="focusOverlay">
+        <div class="focus-word" id="focusWord">Word</div>
+        <div class="focus-trans" id="focusTrans" onclick="revealTranslation()">點擊顯示翻譯</div>
+        <div class="action-group">
+            <button class="action-btn" onclick="markLearned(true)">記住了</button>
+            <button class="action-btn" onclick="markLearned(false)">還沒記住</button>
+        </div>
+        <div class="switch-word-group">
+            <button class="arrow-btn" onclick="switchFocusAdjacent(-1)">← 上一個</button>
+            <button class="action-btn" style="border:none; padding:12px 20px;" onclick="closeFocus()">返回海中</button>
+            <button class="arrow-btn" onclick="switchFocusAdjacent(1)">下一個 →</button>
+        </div>
+    </div>
+    <div class="modal" id="listsModal">
+        <div class="modal-title">我的單字表與組合</div>
+        <div style="display:flex; gap:10px; margin-bottom:10px;">
+            <input type="text" id="newListNameInput" placeholder="輸入新單字表名稱..." style="margin-bottom:0;">
+            <button class="action-btn" onclick="createNewList()">創立</button>
+        </div>
+        <div class="section-subtitle">基礎單字包（可多選）</div>
+        <div id="listsContainer" style="max-height: 350px; overflow-y: auto;"></div>
+        <div style="display: flex; gap: 10px; margin-top: 15px; align-items: center;">
+            <input type="text" id="newComboNameInput" placeholder="將目前勾選存為新組合名稱..." style="margin-bottom:0;">
+            <button class="action-btn" onclick="saveCurrentCombo()">儲存此組合</button>
+        </div>
+        <div class="section-subtitle">已存組合包</div>
+        <div id="combosContainer" style="max-height: 150px; overflow-y: auto;"></div>
+        <button class="action-btn" style="width:100%; margin-top:20px; background-color: var(--text-color); color: var(--bg-color);" onclick="applySelectedLists()">確認應用選取</button>
+        <button class="nav-btn" style="margin-top:10px; padding: 15px;" onclick="closeModal('listsModal')">關閉</button>
+    </div>
+    <div class="modal" id="importModal">
+        <div class="modal-title">自動查詞匯入</div>
+        <p style="font-size: 13px; color: var(--sub-color); margin-bottom: 10px; text-align: center;">請選擇要匯入的目的地：</p>
+        <select id="importTargetSelect"></select>
+        <p style="font-size: 13px; color: var(--sub-color); margin-bottom: 10px; text-align: center;">請輸入單字（一行一個）。支援直接帶有翻譯，例如：apple 蘋果</p>
+        <textarea id="importInput" placeholder="apple 蘋果&#10;banana 香蕉&#10;serendipity 不期而遇的美好&#10;ephemeral"></textarea>
+        <button id="startQueryBtn" class="action-btn" style="width:100%; margin-bottom:20px;" onclick="fetchTranslationsOnline()">開始自動查詢與解析</button>
+        <div id="queryPreviewSection" style="display:none; flex: 1; display: flex; flex-direction: column;">
+            <p style="margin-bottom:10px; font-weight: 500;">字典查詢預覽（可在下方框內直接修改翻譯）：</p>
+            <div class="preview-box" id="previewBox"></div>
+            <button class="action-btn" style="width:100%; margin-top:10px; background-color: var(--text-color); color: var(--bg-color);" onclick="saveImportedWordsOnline()">確認無誤，匯入海中</button>
+        </div>
+        <button class="nav-btn" style="margin-top:auto; padding: 15px;" onclick="closeImportModal()">取消退出</button>
+    </div>
+    <div class="modal" id="quizModal">
+        <div class="modal-title">自我測驗</div>
+        <div class="quiz-container" id="quizContainer"></div>
+        <button class="nav-btn" style="margin-top:auto; padding: 15px;" onclick="closeModal('quizModal')">結束測驗</button>
+    </div>
+    <script>
+        const defaultPackage = {
+            currentListIds: ['list_default'], 
+            lists: {
+                'list_default': { 
+                    name: '初始單字表', 
+                    words: [
+                        { id: 1, word: 'serendipity', trans: ['不期而遇的美好'], wrongCount: 2, lastReviewed: Date.now() - 900000000 }, 
+                        { id: 2, word: 'こもれび', trans: ['從樹葉縫隙漏下來的陽光'], wrongCount: 0, lastReviewed: Date.now() }, 
+                        { id: 3, word: 'ephemeral', trans: ['轉瞬即逝的'], wrongCount: 4, lastReviewed: Date.now() - 500000000 }, 
+                        { id: 4, word: 'しんりんよく', trans: ['森林浴'], wrongCount: 1, lastReviewed: Date.now() }
+                    ]
+                } 
+            }, 
+            combos: {} 
+        };
+        
+        let appData = JSON.parse(localStorage.getItem('vocab_app_data')) || defaultPackage;
+        if (appData.lists && appData.lists['list_default'] && appData.lists['list_default'].name === '核心字彙') {
+            appData.lists['list_default'].name = '初始單字表'; 
+        }
+        if (!Array.isArray(appData.currentListIds)) {
+            appData.currentListIds = appData.currentListId ? [appData.currentListId] : ['list_default']; 
+        }
+        if (!appData.combos) appData.combos = {};
+        
+        let currentFocusIndex = -1;
+        let onlineImportList = [];
+        let rotX = 0, rotY = 0;
+        let translateZ = -300; // 控制縮放的深度變數，預設往後退 300px
+        let isDragging = false;
+        let dragMoved = false;
+        let startX, startY;
+        let initialPinchDist = null; // 用於手機雙指縮放
+
+        function getCombinedWords() {
+            let combined = []; 
+            appData.currentListIds.forEach(id => {
+                if (appData.lists[id]) {
+                    appData.lists[id].words.forEach(w => { combined.push({ ...w, originListId: id }); }); 
+                } 
+            }); 
+            return combined; 
+        }
+        
+        window.onload = function() {
+            const savedTheme = localStorage.getItem('theme') || 'dark'; 
+            document.documentElement.setAttribute('data-theme', savedTheme); 
+            document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '淺色模式' : '深色模式'; 
+            updateNavBarTitle(); 
+            render3DSpace(); 
+            init3DControl(); 
+            animate(); 
+        };
+        
+        function showToast(msg) {
+            const toast = document.getElementById('toastNotice'); 
+            toast.innerText = msg; 
+            toast.classList.add('show'); 
+            setTimeout(() => toast.classList.remove('show'), 1200); 
+        }
+        
+        function saveToStorage() { localStorage.setItem('vocab_app_data', JSON.stringify(appData)); }
+        
+        function toggleTheme() {
+            const currentTheme = document.documentElement.getAttribute('data-theme'); 
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark'; 
+            document.documentElement.setAttribute('data-theme', newTheme); 
+            localStorage.setItem('theme', newTheme); 
+            document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '淺色模式' : '深色模式'; 
+            render3DSpace(); 
+        }
+        
+        function updateNavBarTitle() {
+            if (appData.currentListIds.length === 1) {
+                const id = appData.currentListIds[0]; 
+                document.getElementById('currentListNameBtn').innerText = appData.lists[id] ? appData.lists[id].name : '選擇單字表'; 
+            } else {
+                document.getElementById('currentListNameBtn').innerText = `已選 ${appData.currentListIds.length} 個單字包`; 
+            } 
+        }
+        
+        // 核心修改 1：改造成圓筒狀環繞（Cylinder Layout）
+        function render3DSpace() {
+            const space = document.getElementById('space3d'); 
+            space.innerHTML = ''; 
+            const wordsArr = getCombinedWords(); 
+            if (wordsArr.length === 0) {
+                space.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:var(--sub-color); font-size:14px; text-align:center; width:80%;">目前無選取單字包或包內空空的，請點選「匯入」或更改單字包勾選</div>`; 
+                return; 
+            } 
+            
+            const isMobilePortrait = window.innerWidth < window.innerHeight; 
+            // 圓筒半徑：人在中間，單字在外圈圍繞。半徑大一點，空間感比較好
+            const radius = isMobilePortrait ? window.innerWidth * 0.7 : 450; 
+            
+            // 計算縱向分層與每層單字數
+            const totalWords = wordsArr.length;
+            // 根據單字量自動決定分幾層高（每層放 8~12 個效果最好）
+            const wordsPerLayer = Math.min(10, totalWords);
+            const heightStep = 110; // 每層的縱向間距
+            
+            wordsArr.forEach((item, index) => {
+                const card = document.createElement('div'); 
+                card.className = 'word-card'; 
+                card.setAttribute('data-index', index); 
+                
+                // 計算筒狀座標
+                const layer = Math.floor(index / wordsPerLayer); // 第幾層
+                const totalLayers = Math.ceil(totalWords / wordsPerLayer);
+                const layerIndex = index % wordsPerLayer; // 當前層的第幾個
+                
+                // 角度（水平環繞）
+                const theta = (layerIndex / wordsPerLayer) * 2 * Math.PI;
+                
+                // 3D 空間座標位置
+                const x = radius * Math.sin(theta);
+                const z = radius * Math.cos(theta);
+                // 縱向居中排列
+                const y = (layer - (totalLayers - 1) / 2) * heightStep; 
+                
+                const daysUnreviewed = (Date.now() - item.lastReviewed) / (1000 * 60 * 60 * 24); 
+                let sizeScale = daysUnreviewed > 3 ? 1.35 : 1; 
+                
+                card.dataset.x = x; 
+                card.dataset.y = y; 
+                card.dataset.z = z; 
+                card.dataset.scale = sizeScale; 
+                
+                // 初始位置設定
+                card.style.transform = `translate3d(${x}px, ${y}px, ${z}px) scale(${sizeScale})`; 
+                
+                const textSpan = document.createElement('span'); 
+                textSpan.className = 'word-text'; 
+                if (isMobilePortrait && item.word.length > 10) textSpan.style.fontSize = '18px'; 
+                textSpan.innerText = item.word; 
+                
+                if(item.wrongCount > 0) {
+                    const dot = document.createElement('div'); 
+                    dot.className = 'wrong-dot'; 
+                    dot.style.display = 'block'; 
+                    const dotSize = Math.min(5 + item.wrongCount * 1.5, 13); 
+                    dot.style.width = dotSize + 'px'; 
+                    dot.style.height = dotSize + 'px'; 
+                    dot.style.top = `-${dotSize/2}px`; 
+                    dot.style.right = `-${dotSize}px`; 
+                    textSpan.appendChild(dot); 
+                } 
+                card.appendChild(textSpan); 
+                
+                card.addEventListener('pointerup', (e) => {
+                    if (dragMoved) return; 
+                    e.stopPropagation(); 
+                    openFocus(index); 
+                }); 
+                space.appendChild(card); 
+            }); 
+            updateBillboards(); 
+        }
+        
+        function updateBillboards() {
+            const cards = document.querySelectorAll('.word-card'); 
+            cards.forEach(card => {
+                const x = card.dataset.x; 
+                const y = card.dataset.y; 
+                const z = card.dataset.z; 
+                const scale = card.dataset.scale; 
+                // 這裡加入 rotateY 和 rotateX 修正，讓單字不論怎麼轉都面向鏡頭 (Billboard Effect)
+                card.style.transform = `translate3d(${x}px, ${y}px, ${z}px) rotateY(${-rotY}deg) rotateX(${-rotX}deg) scale(${scale})`; 
+            }); 
+        }
+        
+        // 核心修改 2：舞台加入 3D 的 translateZ（前後縮放移動）
+        function updateSpaceTransform() {
+            document.getElementById('space3d').style.transform = `translateZ(${translateZ}px) rotateX(${rotX}deg) rotateY(${rotY}deg)`;
+        }
+        
+        function init3DControl() {
+            const container = document.getElementById('stageContainer'); 
+            
+            const dragStart = (x, y) => {
+                isDragging = true; 
+                dragMoved = false; 
+                startX = x; 
+                startY = y; 
+            };
+            
+            const dragMove = (x, y) => {
+                if (!isDragging) return; 
+                const dx = x - startX; 
+                const dy = y - startY; 
+                if (Math.abs(dx) > 4 || Math.abs(dy) > 4) { dragMoved = true; } 
+                rotY += dx * 0.25; 
+                rotX -= dy * 0.25; 
+                
+                // 限制上下視角，避免翻轉過頭頭暈
+                rotX = Math.max(-45, Math.min(45, rotX));
+                
+                startX = x; 
+                startY = y; 
+                updateSpaceTransform();
+                updateBillboards(); 
+            };
+            
+            const dragEnd = () => { setTimeout(() => { isDragging = false; }, 10); }; 
+            
+            // 電腦端滑鼠滾輪縮放
+            window.addEventListener('wheel', (e) => {
+                // 排除彈窗內捲動干擾
+                if (document.querySelector('.modal.active')) return;
+                
+                translateZ -= e.deltaY * 0.
