@@ -84,9 +84,16 @@
             align-items: center;
             cursor: grab;
             position: relative;
+            transition: opacity 0.4s ease, filter 0.4s ease; /* 讓背景淡化更平滑 */
         }
         .stage-container:active {
             cursor: grabbing;
+        }
+        /* 當其他頁面打開時，用於弱化單字海視覺與干擾的樣式 */
+        .stage-container.blur-out {
+            opacity: 0.15;
+            filter: blur(4px);
+            pointer-events: none; /* 雙重保險，完全禁止任何單字卡點擊 */
         }
         .space3d {
             width: 100%;
@@ -99,7 +106,7 @@
             top: 50%;
             cursor: pointer;
             white-space: nowrap;
-            padding: 20px; /* 增大點擊熱區，不論手機電腦都好點 */
+            padding: 20px; 
             transform-origin: center center;
             will-change: transform, opacity;
         }
@@ -469,8 +476,13 @@
         let startTouchDist = 0;
         let animationFrameId = null;
 
-        // 滑動與點擊的判定閥值
         let totalDragDistance = 0;
+
+        // 檢查目前畫面上是否有任何彈出視窗（Modal）或是單字聚焦卡（Focus Overlay）處於開啟狀態
+        function isAnyOverlayOpen() {
+            return document.querySelector('.modal.active') !== null || 
+                   document.getElementById('focusOverlay').classList.includes('active');
+        }
 
         function getCombinedWords() {
             let combined = [];
@@ -580,9 +592,10 @@
                 }
                 card.appendChild(textSpan);
                 
-                // 【終極解決方案】：跨平台通用 click 事件
-                // 只要滑動距離極小，就判定為精準點擊，並阻斷冒泡不讓背景綁架
                 card.addEventListener('click', (e) => {
+                    // 如果有視窗開啟，直接拒絕任何點擊卡片行為
+                    if (document.querySelector('.modal.active')) return;
+                    
                     if (totalDragDistance < 8) {
                         e.stopPropagation(); 
                         vx = 0;
@@ -667,12 +680,14 @@
         function init3DControl() {
             const container = document.getElementById('stageContainer');
             
-            // 統一監聽最上層容器的 pointerdown
             container.addEventListener('pointerdown', (e) => {
+                // 優化：如果其他頁面（Modal）打開了，直接阻斷，無法拖曳
+                if (document.querySelector('.modal.active')) return;
+                
                 if (e.pointerType === 'touch' && !e.isPrimary) return;
 
                 isDragging = true;
-                totalDragDistance = 0; // 重置拖拽距離
+                totalDragDistance = 0; 
                 startX = e.clientX;
                 startY = e.clientY;
                 lastX = e.clientX;
@@ -686,12 +701,13 @@
 
             container.addEventListener('pointermove', (e) => {
                 if (!isDragging) return;
+                if (document.querySelector('.modal.active')) return; // 保險機制
                 if (e.pointerType === 'touch' && startTouchDist > 0) return;
 
                 const dx = e.clientX - startX;
                 const dy = e.clientY - startY;
                 
-                totalDragDistance += Math.hypot(dx, dy); // 累加移動距離
+                totalDragDistance += Math.hypot(dx, dy); 
 
                 rotY += dx * 0.25;
                 rotX -= dy * 0.25;
@@ -720,15 +736,16 @@
                 }
             });
 
-            // 滑鼠滾輪縮放
+            // 滑鼠滾輪縮放（其他頁面開啟時禁用）
             window.addEventListener('wheel', (e) => {
                 if (document.querySelector('.modal.active')) return;
                 userZ -= e.deltaY * 0.4;
                 userZ = Math.max(MIN_USER_Z, Math.min(MAX_USER_Z, userZ));
             }, { passive: true });
 
-            // 手機雙指縮放
+            // 手機雙指縮放（其他頁面開啟時禁用）
             container.addEventListener('touchstart', (e) => {
+                if (document.querySelector('.modal.active')) return;
                 if (e.touches.length === 2) {
                     isDragging = false; 
                     startTouchDist = Math.hypot(
@@ -740,6 +757,7 @@
             }, { passive: true });
 
             container.addEventListener('touchmove', (e) => {
+                if (document.querySelector('.modal.active')) return;
                 if (e.touches.length === 2 && startTouchDist > 0) {
                     const currentDist = Math.hypot(
                         e.touches[0].clientX - e.touches[1].clientX,
@@ -765,6 +783,9 @@
             const item = wordsArr[index];
             document.getElementById('focusWord').innerText = item.word;
             document.getElementById('focusTrans').innerText = '點擊顯示翻譯';
+            
+            // 開啟焦點單字卡時，背景也套用淡化效果
+            document.getElementById('stageContainer').classList.add('blur-out');
             document.getElementById('focusOverlay').classList.add('active');
         }
 
@@ -778,6 +799,8 @@
 
         function closeFocus() {
             document.getElementById('focusOverlay').classList.remove('active');
+            // 還原背景單字海的視覺亮度
+            document.getElementById('stageContainer').classList.remove('blur-out');
             renderCylinderSpace(); 
         }
 
@@ -814,6 +837,8 @@
         }
 
         function openModal(id) {
+            // 開啟頁面時，將 3D 單字海容器加上淡化/模糊效果且阻斷 pointer-events
+            document.getElementById('stageContainer').classList.add('blur-out');
             document.getElementById(id).classList.add('active');
             if (id === 'listsModal') renderListsManager();
             if (id === 'importModal') prepareImportTargetSelect();
@@ -821,6 +846,8 @@
 
         function closeModal(id) {
             document.getElementById(id).classList.remove('active');
+            // 關閉頁面時，恢復背景單字海亮度
+            document.getElementById('stageContainer').classList.remove('blur-out');
             renderCylinderSpace();
         }
 
