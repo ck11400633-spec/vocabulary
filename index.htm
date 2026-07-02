@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <title>Minimalist Vocab - Center Focused Cylinder</title>
+    <title>Minimalist Vocab - Universal Fix</title>
     <style>
         :root {
             --bg-color: #1C1C1E;
@@ -29,7 +29,7 @@
             padding: 0;
             user-select: none;
             -webkit-user-select: none;
-            touch-action: none;
+            touch-action: none; 
         }
         body {
             background-color: var(--bg-color);
@@ -99,7 +99,7 @@
             top: 50%;
             cursor: pointer;
             white-space: nowrap;
-            padding: 15px;
+            padding: 20px; /* 增大點擊熱區，不論手機電腦都好點 */
             transform-origin: center center;
             will-change: transform, opacity;
         }
@@ -366,7 +366,7 @@
             <button class="nav-btn" onclick="startQuiz()">測驗</button>
         </div>
         <div class="nav-right">
-            <button class="nav-btn" id="themeBtn" onclick="toggleTheme()">深色模式</button>
+            <button class="nav-btn" id="themeBtn" onclick="toggleTheme()">切換至淺色模式</button>
         </div>
     </div>
     
@@ -451,27 +451,26 @@
         let currentFocusIndex = -1;
         let onlineImportList = [];
         
-        // 3D 核心變數
         let rotX = 0, rotY = 0;
-        let userZ = 0; 
         let dynamicRadius = 380; 
         const CAMERA_FOCAL = 400; 
 
-        // 縮小邊界限制（初始值的一半，對應 Z 軸限制值）
-        const MIN_USER_Z = -380; 
-        const MAX_USER_Z = 400;
+        const MIN_USER_Z = -500; 
+        const MAX_USER_Z = -100; 
+        let userZ = MAX_USER_Z;   
 
-        // 自動旋轉與慣性變數
         let autoRotSpeedY = 0.04; 
-        let vx = 0, vy = 0;       
-        const friction = 0.94;    
+        let vx = 0, vy = 0; 
         
         let isDragging = false;
-        let dragMoved = false;
         let startX, startY;
         let lastTime, lastX, lastY; 
-        let initialPinchDist = null;
+        let startPinchZ = 0;
+        let startTouchDist = 0;
         let animationFrameId = null;
+
+        // 滑動與點擊的判定閥值
+        let totalDragDistance = 0;
 
         function getCombinedWords() {
             let combined = [];
@@ -488,7 +487,8 @@
         window.onload = function() {
             const savedTheme = localStorage.getItem('theme') || 'dark';
             document.documentElement.setAttribute('data-theme', savedTheme);
-            document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '淺色模式' : '深色模式';
+            document.getElementById('themeBtn').innerText = savedTheme === 'dark' ? '切換至淺色模式' : '切換至深色模式';
+            
             updateNavBarTitle();
             renderCylinderSpace();
             init3DControl();
@@ -511,7 +511,7 @@
             const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
             document.documentElement.setAttribute('data-theme', newTheme);
             localStorage.setItem('theme', newTheme);
-            document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '深色模式' : '淺色模式';
+            document.getElementById('themeBtn').innerText = newTheme === 'dark' ? '切換至淺色模式' : '切換至深色模式';
         }
 
         function updateNavBarTitle() {
@@ -528,7 +528,7 @@
             space.innerHTML = '';
             const wordsArr = getCombinedWords();
             if (wordsArr.length === 0) {
-                space.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:var(--sub-color); font-size:14px; text-align:center; width:80%;">目前無選取單字包或包內空空的，請點選「匯入」或更改單字包勾選</div>`;
+                space.innerHTML = `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%, -50%); color:var(--sub-color); font-size:14px; text-align:center; width:80%;">目前無選取單字包或包內空空的</div>`;
                 return;
             }
 
@@ -548,10 +548,13 @@
                 const totalLayers = Math.ceil(totalWords / wordsPerLayer);
                 const layerIndex = index % wordsPerLayer;
 
-                const theta = (layerIndex / wordsPerLayer) * 2 * Math.PI;
+                const randomAngleOffset = (Math.random() - 0.5) * (2 * Math.PI / wordsPerLayer) * 0.7;
+                const randomHeightOffset = (Math.random() - 0.5) * heightStep * 0.6;
+
+                const theta = ((layerIndex / wordsPerLayer) * 2 * Math.PI) + randomAngleOffset;
                 const origX = dynamicRadius * Math.sin(theta);
                 const origZ = dynamicRadius * Math.cos(theta);
-                const origY = (layer - (totalLayers - 1) / 2) * heightStep;
+                const origY = ((layer - (totalLayers - 1) / 2) * heightStep) + randomHeightOffset;
 
                 card.dataset.origX = origX;
                 card.dataset.origY = origY;
@@ -576,16 +579,22 @@
                     textSpan.appendChild(dot);
                 }
                 card.appendChild(textSpan);
-                card.addEventListener('pointerup', (e) => {
-                    if (dragMoved) return;
-                    e.stopPropagation();
-                    openFocus(index);
+                
+                // 【終極解決方案】：跨平台通用 click 事件
+                // 只要滑動距離極小，就判定為精準點擊，並阻斷冒泡不讓背景綁架
+                card.addEventListener('click', (e) => {
+                    if (totalDragDistance < 8) {
+                        e.stopPropagation(); 
+                        vx = 0;
+                        vy = 0;
+                        openFocus(index);
+                    }
                 });
+
                 space.appendChild(card);
             });
         }
 
-        // 以「視角中心點」為核心的優化渲染公式
         function updatePseudo3DProjection() {
             const cards = document.querySelectorAll('.word-card');
             if (cards.length === 0) return;
@@ -619,15 +628,9 @@
                 const screenX = x1 * projectionScale;
                 const screenY = y2 * projectionScale;
 
-                // 【修正：以視角中心為主】
-                // 計算單字投影到螢幕後，距離中心點 (0, 0) 的 2D 像素距離
                 const distToCenter = Math.hypot(screenX, screenY);
-                
-                // 越靠近中心點，centerFactor 越接近 1；遠離中心點則逼近 0。
-                // 250px 範圍內為主要感應區
                 const centerFactor = Math.max(0, 1 - distToCenter / 250); 
 
-                // 在前方 (finalZ < 200) 且位於視角中心時才做平滑放大，最大放大倍率鎖定在 1.7 倍
                 let focusMagnify = 1.0;
                 if (finalZ < 200) {
                     focusMagnify = 1.0 + (centerFactor * 0.7);
@@ -636,7 +639,6 @@
                 const baseScale = parseFloat(card.dataset.baseScale);
                 const finalScale = projectionScale * baseScale * focusMagnify;
                 
-                // 讓非中心的邊緣單字稍微淡出，強化中央焦點
                 let opacity = projectionScale * (0.4 + centerFactor * 0.8);
                 if (opacity > 1) opacity = 1; 
                 if (viewDist < 100) opacity = (viewDist - 20) / 80; 
@@ -653,8 +655,6 @@
                     rotY += autoRotSpeedY;
                     rotY += vy;
                     rotX += vx;
-                    vy *= friction;
-                    vx *= friction;
                     rotX = Math.max(-40, Math.min(40, rotX));
                 }
                 updatePseudo3DProjection();
@@ -667,14 +667,18 @@
         function init3DControl() {
             const container = document.getElementById('stageContainer');
             
+            // 統一監聽最上層容器的 pointerdown
             container.addEventListener('pointerdown', (e) => {
+                if (e.pointerType === 'touch' && !e.isPrimary) return;
+
                 isDragging = true;
-                dragMoved = false;
+                totalDragDistance = 0; // 重置拖拽距離
                 startX = e.clientX;
                 startY = e.clientY;
                 lastX = e.clientX;
                 lastY = e.clientY;
                 lastTime = performance.now();
+                
                 vx = 0;
                 vy = 0;
                 container.setPointerCapture(e.pointerId);
@@ -682,12 +686,13 @@
 
             container.addEventListener('pointermove', (e) => {
                 if (!isDragging) return;
+                if (e.pointerType === 'touch' && startTouchDist > 0) return;
+
                 const dx = e.clientX - startX;
                 const dy = e.clientY - startY;
-                if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-                    dragMoved = true;
-                }
                 
+                totalDragDistance += Math.hypot(dx, dy); // 累加移動距離
+
                 rotY += dx * 0.25;
                 rotX -= dy * 0.25;
                 rotX = Math.max(-40, Math.min(40, rotX));
@@ -715,37 +720,40 @@
                 }
             });
 
+            // 滑鼠滾輪縮放
             window.addEventListener('wheel', (e) => {
                 if (document.querySelector('.modal.active')) return;
                 userZ -= e.deltaY * 0.4;
                 userZ = Math.max(MIN_USER_Z, Math.min(MAX_USER_Z, userZ));
             }, { passive: true });
 
+            // 手機雙指縮放
             container.addEventListener('touchstart', (e) => {
                 if (e.touches.length === 2) {
-                    initialPinchDist = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
+                    isDragging = false; 
+                    startTouchDist = Math.hypot(
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
                     );
+                    startPinchZ = userZ;
                 }
             }, { passive: true });
 
             container.addEventListener('touchmove', (e) => {
-                if (e.touches.length === 2 && initialPinchDist) {
+                if (e.touches.length === 2 && startTouchDist > 0) {
                     const currentDist = Math.hypot(
-                        e.touches[0].pageX - e.touches[1].pageX,
-                        e.touches[0].pageY - e.touches[1].pageY
+                        e.touches[0].clientX - e.touches[1].clientX,
+                        e.touches[0].clientY - e.touches[1].clientY
                     );
-                    const delta = currentDist - initialPinchDist;
-                    userZ += delta * 1.2;
+                    const deltaDist = currentDist - startTouchDist;
+                    userZ = startPinchZ + deltaDist * 1.2;
                     userZ = Math.max(MIN_USER_Z, Math.min(MAX_USER_Z, userZ));
-                    initialPinchDist = currentDist;
                 }
             }, { passive: true });
 
             container.addEventListener('touchend', (e) => {
                 if (e.touches.length < 2) {
-                    initialPinchDist = null;
+                    startTouchDist = 0;
                 }
             });
         }
